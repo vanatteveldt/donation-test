@@ -1,3 +1,4 @@
+import argparse
 import logging
 import time
 from pathlib import Path
@@ -6,7 +7,7 @@ from playwright._impl._errors import TimeoutError
 from playwright.sync_api import sync_playwright
 
 
-def run_test(task: str, id: str, file: Path):
+def run_test(url: str, file: Path):
     with sync_playwright() as p:
 
         browser = p.firefox.launch(headless=False)
@@ -14,7 +15,6 @@ def run_test(task: str, id: str, file: Path):
         page = context.new_page()
 
         # 1. Navigate to the URL
-        url = f"https://next.eyra.co/a/{task}?p={id}"
         page.goto(url)
 
         # 2. Open the upload dialog by clicking 'Verder', YouTube, and 'Doorgaan'
@@ -71,10 +71,27 @@ def run_test(task: str, id: str, file: Path):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-    testfile = Path.cwd() / "YT_large_test_file.zip"
-    for i in range(20):
-        logging.info(f"**** Running test {i} ****")
+
+    parser = argparse.ArgumentParser(description="Donation File Upload Test Script")
+
+    # Mandatory arguments (positional)
+    parser.add_argument("testfile", help="Path to the file you want to upload", type=Path)
+    parser.add_argument("task", help="The task ID for the test, e.g. H35Ghq")
+
+    # Optional arguments (with defaults)
+    parser.add_argument("-i", "--iterations", type=int, default=10, help="Number of times to run the test (default: 10)")
+    parser.add_argument(
+        "-p", "--id_prefix", default="test_playwright", help="Prefix for the URL parameter (default: test_playwright)"
+    )
+
+    args = parser.parse_args()
+    if not args.testfile.exists():
+        raise FileNotFoundError(f"Test file {args.testfile} does not exist")
+
+    for i in range(args.iterations):
+        url = f"https://next.eyra.co/a/{args.task}?p={args.id_prefix}_{i}"
+        logging.info(f"**** Running test {i}: {url} ****")
         try:
-            run_test("H35Ghq", f"test_playwright_{i}", testfile)
+            run_test(url, args.testfile)
         except Exception as e:
             logging.exception(f"Test {i} failed with exception: {e}, continuing")
