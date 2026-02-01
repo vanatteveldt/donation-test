@@ -65,7 +65,7 @@ def run_test(url: str, file: Path):
         # This ensures the test doesn't close until the target site actually loads
         page.wait_for_url("https://what-if-horizon.eu/**", timeout=15000)
 
-        logging.info(f"Upload {task}:{id} complete, closing browser!")
+        logging.info(f"Upload {id}:{url} complete, closing browser!")
         browser.close()
 
 
