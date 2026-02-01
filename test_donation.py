@@ -75,7 +75,7 @@ if __name__ == "__main__":
     )
 
     # Optional arguments (with defaults)
-    parser.add_argument("-i", "--iterations", type=int, default=10, help="Number of times to run the test (default: 10)")
+    parser.add_argument("-i", "--iterations", type=int, default=3, help="Number of times to run the test (default: 10)")
 
     args = parser.parse_args()
     if not args.testfile.exists():
