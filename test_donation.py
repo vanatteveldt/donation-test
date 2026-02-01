@@ -53,19 +53,13 @@ def run_test(url: str, file: Path):
         logging.info("Confirming upload")
         confirm_btn.click()
 
-        # 5. We're done, but let's click the buttons to finish the process
+        # 5. We're done, but let's click the buttons and check the process is done
         finish_btn = page.locator("div.prism-btn").filter(has_text="Volgende, ik ben klaar")
         finish_btn.click()
 
-        final_doorgaan = page.locator("div.prism-btn").filter(has_text="Doorgaan")
-        final_doorgaan.click()
-        logging.info("Clicked final 'Doorgaan'. Waiting for redirect...")
-
-        # 6. Wait for the redirect to the final URL and close the browser
-        # This ensures the test doesn't close until the target site actually loads
-        page.wait_for_url("https://what-if-horizon.eu/**", timeout=15000)
-
-        logging.info(f"Upload {id}:{url} complete, closing browser!")
+        klaar_header = page.get_by_test_id("finished-title")
+        klaar_header.wait_for(state="visible")
+        logging.info(f"Upload to {url} complete, closing browser!")
         browser.close()
 
 
@@ -76,20 +70,19 @@ if __name__ == "__main__":
 
     # Mandatory arguments (positional)
     parser.add_argument("testfile", help="Path to the file you want to upload", type=Path)
-    parser.add_argument("task", help="The task ID for the test, e.g. H35Ghq")
+    parser.add_argument(
+        "url_prefix", help="The eyra participant url prefix, e.g. https://next.eyra.co/a/XXXXX?p=test_playwright"
+    )
 
     # Optional arguments (with defaults)
     parser.add_argument("-i", "--iterations", type=int, default=10, help="Number of times to run the test (default: 10)")
-    parser.add_argument(
-        "-p", "--id_prefix", default="test_playwright", help="Prefix for the URL parameter (default: test_playwright)"
-    )
 
     args = parser.parse_args()
     if not args.testfile.exists():
         raise FileNotFoundError(f"Test file {args.testfile} does not exist")
 
     for i in range(args.iterations):
-        url = f"https://next.eyra.co/a/{args.task}?p={args.id_prefix}_{i}"
+        url = f"{args.url_prefix}_{i}"
         logging.info(f"**** Running test {i}: {url} ****")
         try:
             run_test(url, args.testfile)
