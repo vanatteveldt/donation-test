@@ -10,7 +10,7 @@ from playwright.sync_api import sync_playwright
 def run_test(url: str, file: Path):
     with sync_playwright() as p:
 
-        browser = p.firefox.launch(headless=False)
+        browser = p.firefox.launch(headless=True)
         context = browser.new_context()
         page = context.new_page()
 
@@ -27,11 +27,11 @@ def run_test(url: str, file: Path):
         except TimeoutError:
             logging.info("No consent screen detected, continuing...")
         btn = page.get_by_text("YouTube", exact=True)
-        btn.wait_for(state="visible")
+        btn.wait_for(state="visible", timeout=120000)
         btn.click()
 
         btn = page.get_by_text("Doorgaan", exact=True)
-        btn.wait_for(state="visible")
+        btn.wait_for(state="visible", timeout=120000)
         btn.click()
         logging.info("Waiting for file uploader to load")
 
@@ -39,14 +39,21 @@ def run_test(url: str, file: Path):
         # This is inside an iframe, so open that first and then upload the file
         target_frame = page.frame_locator('iframe[src*="amazonaws.com"]')
         with page.expect_file_chooser() as fc_info:
-            target_frame.get_by_text("Kies bestand").click()
+            btn = target_frame.get_by_text("Kies bestand")
+            btn.wait_for(state="visible", timeout=120000)
+            btn.click()
+
         fc_info.value.set_files(file)
-        logging.info("Uploading file {file}")
-        target_frame.get_by_text("Verder", exact=True).click()
+        logging.info(f"Uploading file {file}")
+        btn = target_frame.get_by_text("Verder", exact=True)
+        btn.wait_for(state="visible", timeout=120000)
+        btn.click()
 
         # 4. Give consent
         target_frame = page.frame_locator('iframe[src*="amazonaws.com"]')
-        confirm_btn = target_frame.locator("#confirm-button").filter(has_text="Ja, deel voor onderzoek")
+        confirm_btn = target_frame.locator("#confirm-button").filter(
+            has_text="Ja, deel voor onderzoek"
+        )
         logging.info("Waiting for upload to complete and consent button to appear...")
         confirm_btn.wait_for(state="visible", timeout=120000)
         confirm_btn.scroll_into_view_if_needed()
@@ -54,28 +61,45 @@ def run_test(url: str, file: Path):
         confirm_btn.click()
 
         # 5. We're done, but let's click the buttons and check the process is done
-        finish_btn = page.locator("div.prism-btn").filter(has_text="Volgende, ik ben klaar")
+        finish_btn = page.locator("div.prism-btn").filter(
+            has_text="Volgende, ik ben klaar"
+        )
         finish_btn.click()
 
         klaar_header = page.get_by_test_id("finished-title")
         klaar_header.wait_for(state="visible")
-        logging.info(f"Upload to {url} complete, closing browser!")
+        logging.info(f"Upload to {url} complete, sleeping 15 minutes!")
+        time.sleep(15 * 60)
+        logging.info(f"Closing browser!")
         browser.close()
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
     parser = argparse.ArgumentParser(description="Donation File Upload Test Script")
 
     # Mandatory arguments (positional)
-    parser.add_argument("testfile", help="Path to the file you want to upload", type=Path)
     parser.add_argument(
-        "url_prefix", help="The eyra participant url prefix, e.g. https://next.eyra.co/a/XXXXX?p=test_playwright"
+        "testfile", help="Path to the file you want to upload", type=Path
+    )
+    parser.add_argument(
+        "url_prefix",
+        help="The eyra participant url prefix, e.g. https://next.eyra.co/a/XXXXX?p=test_playwright",
     )
 
     # Optional arguments (with defaults)
-    parser.add_argument("-i", "--iterations", type=int, default=3, help="Number of times to run the test (default: 10)")
+    parser.add_argument(
+        "-i",
+        "--iterations",
+        type=int,
+        default=3,
+        help="Number of times to run the test (default: 10)",
+    )
 
     args = parser.parse_args()
     if not args.testfile.exists():
@@ -84,7 +108,9 @@ if __name__ == "__main__":
     for i in range(args.iterations):
         url = f"{args.url_prefix}_{i}"
         logging.info(f"**** Running test {i}: {url} ****")
-        try:
-            run_test(url, args.testfile)
-        except Exception as e:
-            logging.exception(f"Test {i} failed with exception: {e}, continuing")
+        while True:
+            try:
+                run_test(url, args.testfile)
+                break
+            except Exception as e:
+                logging.exception(f"Test {i} failed with exception: {e}, retrying")
