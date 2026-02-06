@@ -7,10 +7,10 @@ from playwright._impl._errors import TimeoutError
 from playwright.sync_api import sync_playwright
 
 
-def run_test(url: str, file: Path):
+def run_test(url: str, file: Path, headless: bool = False, close_page: bool = False, sleep: int = 0):
     with sync_playwright() as p:
 
-        browser = p.firefox.launch(headless=True)
+        browser = p.firefox.launch(headless=headless)
         context = browser.new_context()
         page = context.new_page()
 
@@ -51,9 +51,7 @@ def run_test(url: str, file: Path):
 
         # 4. Give consent
         target_frame = page.frame_locator('iframe[src*="amazonaws.com"]')
-        confirm_btn = target_frame.locator("#confirm-button").filter(
-            has_text="Ja, deel voor onderzoek"
-        )
+        confirm_btn = target_frame.locator("#confirm-button").filter(has_text="Ja, deel voor onderzoek")
         logging.info("Waiting for upload to complete and consent button to appear...")
         confirm_btn.wait_for(state="visible", timeout=120000)
         confirm_btn.scroll_into_view_if_needed()
@@ -61,16 +59,19 @@ def run_test(url: str, file: Path):
         confirm_btn.click()
 
         # 5. We're done, but let's click the buttons and check the process is done
-        finish_btn = page.locator("div.prism-btn").filter(
-            has_text="Volgende, ik ben klaar"
-        )
+        finish_btn = page.locator("div.prism-btn").filter(has_text="Volgende, ik ben klaar")
         finish_btn.click()
 
         klaar_header = page.get_by_test_id("finished-title")
         klaar_header.wait_for(state="visible")
-        logging.info(f"Upload to {url} complete, sleeping 15 minutes!")
-        time.sleep(15 * 60)
-        logging.info(f"Closing browser!")
+        logging.info(f"Upload to {url} complete!")
+        if close_page:
+            logging.info("Closing page (but not browser)")
+            page.close()
+        if sleep:
+            logging.info(f"Sleeping for {sleep} minutes!")
+        time.sleep(sleep * 60)
+        logging.info(f"Closing browser")
         browser.close()
 
 
@@ -84,24 +85,23 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Donation File Upload Test Script")
 
     # Mandatory arguments (positional)
-    parser.add_argument(
-        "testfile", help="Path to the file you want to upload", type=Path
-    )
+    parser.add_argument("testfile", help="Path to the file you want to upload", type=Path)
     parser.add_argument(
         "url_prefix",
         help="The eyra participant url prefix, e.g. https://next.eyra.co/a/XXXXX?p=test_playwright",
     )
 
     # Optional arguments (with defaults)
+    parser.add_argument("-i", "--iterations", type=int, default=3, help="Number of times to run the test (default: 3)")
     parser.add_argument(
-        "-i",
-        "--iterations",
-        type=int,
-        default=3,
-        help="Number of times to run the test (default: 10)",
+        "-s", "--sleep", type=int, default=0, help="Number of minutes to sleep before closing browser (default: 0)"
     )
-
+    parser.add_argument("--headless", action="store_true", help="Run the browser in headless mode")
+    parser.add_argument(
+        "-c", "--close-page", action="store_true", help="Close the page (but not the browser) immediately after upload"
+    )
     args = parser.parse_args()
+
     if not args.testfile.exists():
         raise FileNotFoundError(f"Test file {args.testfile} does not exist")
 
@@ -110,7 +110,7 @@ if __name__ == "__main__":
         logging.info(f"**** Running test {i}: {url} ****")
         while True:
             try:
-                run_test(url, args.testfile)
+                run_test(url, args.testfile, headless=args.headless, close_page=args.close_page, sleep=args.sleep)
                 break
             except Exception as e:
                 logging.exception(f"Test {i} failed with exception: {e}, retrying")
